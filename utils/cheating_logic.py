@@ -80,7 +80,7 @@ def update_scores(faces, phone_boxes, hands_near_face, now):
         # Apply slower decay based on actual elapsed time since last suspicious event
         if not suspicious:
             time_since_last_suspicious = now - last_suspicious_time[face_id]
-            decay_rate = 0.2  # much slower decay: 0.2 points per second
+            decay_rate = 0.1  # much slower decay: 0.2 points per second
             decay_amount = decay_rate * time_since_last_suspicious
             new_score = max(0, new_score - decay_amount)
         else:
