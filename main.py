@@ -5,7 +5,6 @@ from utils import cheating_logic
 from utils import tracker  # DeepSort tracker wrapper
 
 def compute_iou(boxA, boxB):
-    # boxA and boxB format: [x1, y1, x2, y2]
     xA = max(boxA[0], boxB[0])
     yA = max(boxA[1], boxB[1])
     xB = min(boxA[2], boxB[2])
@@ -13,8 +12,7 @@ def compute_iou(boxA, boxB):
     interArea = max(0, xB - xA) * max(0, yB - yA)
     boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
     boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
-    iou = interArea / float(boxAArea + boxBArea - interArea) if (boxAArea + boxBArea - interArea) > 0 else 0
-    return iou
+    return interArea / float(boxAArea + boxBArea - interArea) if (boxAArea + boxBArea - interArea) > 0 else 0
 
 def merge_pose_to_tracked(tracked_faces, detected_faces):
     merged = []
@@ -49,7 +47,8 @@ def merge_pose_to_tracked(tracked_faces, detected_faces):
     return merged
 
 def main():
-    yolo_model = object_detection.load_model('models/yolov5s.pt')
+    # Load models
+    yolo_model = object_detection.load_model('models/yolov5su.pt')
     face_mesh = face_detection.init_face_mesh()
     pose_detector = pose_detection.init_pose()
 
@@ -67,30 +66,29 @@ def main():
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         now = time.time()
 
+        # Run all detectors
         phone_boxes = object_detection.detect_phones(yolo_model, frame)
-        hands_near_face = pose_detection.hands_near_face(pose_detector, rgb_frame)
         faces = face_detection.get_faces(face_mesh, rgb_frame, w, h)
 
-        # Prepare detections for tracker: [bbox, confidence, class_id]
         face_detections = []
         for face in faces:
             x1, y1, x2, y2 = face['bbox']
-            conf = 1.0
-            class_id = 0
-            face_detections.append(([x1, y1, x2, y2], conf, class_id))
+            face_detections.append(([x1, y1, x2, y2], 1.0, 0))
 
         tracked_faces = tracker.get_tracked_faces(frame, face_detections)
-
-        # Merge pose info into tracked faces before updating scores
         tracked_faces = merge_pose_to_tracked(tracked_faces, faces)
 
+        # now that we have tracked_faces, assign the same hand detection result to each face
+        hands_near = pose_detection.hands_near_face(pose_detector, rgb_frame)
+        hands_near_face_dict = {face['id']: hands_near for face in tracked_faces}
+
         if now - last_update_time > frame_interval:
-            cheating_logic.update_scores(tracked_faces, phone_boxes, hands_near_face, now)
+            cheating_logic.update_scores(tracked_faces, phone_boxes, hands_near_face_dict, now, frame)
             last_update_time = now
 
         cheating_logic.visualize(frame, tracked_faces)
 
-        cv2.imshow("Cheating Detection", frame)
+        cv2.imshow("Cheating Detection - Live Feed", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
