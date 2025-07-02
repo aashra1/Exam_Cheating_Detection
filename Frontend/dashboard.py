@@ -12,24 +12,27 @@ from detection import face_detection, object_detection, pose_detection
 from utils import cheating_logic, tracker
 from utils.detection_helpers import compute_iou, merge_pose_to_tracked
 
-# Import your db helper to fetch logs
-from utils import db  # assuming your db.py has a function to fetch logs from DB
+# Import db helper to fetch logs
+from Backend import db  
 
 def get_logs_from_db():
-    # Fetch all logs from your DB table `logs`
+    # Fetch all logs from DB table `logs`
     try:
         conn = db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT timestamp, class_id, face_id, activity, severity, image_url FROM logs ORDER BY timestamp DESC")
+        cursor.execute("""
+            SELECT timestamp, class_id, face_id, activity, severity, image_url, video_url 
+            FROM logs ORDER BY timestamp DESC
+        """)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
         # Convert to pandas DataFrame with matching columns
-        df = pd.DataFrame(rows, columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path"])
+        df = pd.DataFrame(rows, columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"])
         return df
     except Exception as e:
         st.error(f"Error fetching logs from database: {e}")
-        return pd.DataFrame(columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path"])
+        return pd.DataFrame(columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"])
 
 def dashboard():
     # ===== STYLING =====
@@ -138,7 +141,7 @@ def dashboard():
 
         page = st.radio(
             "Navigation",
-            ["Activity Logs", "Flagged Snapshots", "Download Logs", "Summary"],
+            ["Activity Logs", "Flagged Snapshots", "Video Clips", "Download Logs", "Summary"],  # <-- Added "Video Clips"
             label_visibility="collapsed",
         )
 
@@ -152,7 +155,7 @@ def dashboard():
             </div>
         """, unsafe_allow_html=True)
 
-    # Fetch logs from DB here instead of CSV
+    # Fetch logs from DB 
     df = get_logs_from_db()
 
     # ===== MAIN CONTENT =====
@@ -206,17 +209,42 @@ def dashboard():
             else:
                 cols = st.columns(2)
                 for i, row in df.iterrows():
-                    img_path = row["image_path"]
-                    if img_path and os.path.exists(img_path):
+                    img_url = row["image_path"]
+                    if img_url and img_url.startswith("http"):  # basic URL check
                         try:
-                            img = Image.open(img_path)
                             with cols[i % 2]:
-                                st.image(img, use_column_width=True)
+                                st.image(img_url, use_column_width=True)
                                 st.caption(f"{row['timestamp']} - {row['activity']}")
                         except Exception as e:
-                            st.error(f"Error loading image {img_path}: {e}")
+                            st.error(f"Error loading image from URL: {e}")
                     else:
                         continue
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        elif page == "Video Clips":
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.header("Flagged Video Clips")
+
+            if df.empty:
+                st.info("No logs found to display videos.")
+            else:
+                videos_df = df[df["video_url"].notna() & (df["video_url"] != "")]
+
+                if videos_df.empty:
+                    st.info("No video clips available.")
+                else:
+                    for i, row in videos_df.iterrows():
+                        video_url = row["video_url"]
+                        timestamp = row["timestamp"]
+                        activity = row["activity"]
+                        face_id = row["face_id"]
+
+                        try:
+                            st.video(video_url)
+                            st.caption(f"{timestamp} | Face ID: {face_id} | Activity: {activity}")
+                        except Exception as e:
+                            st.error(f"Error loading video: {e}")
 
             st.markdown('</div>', unsafe_allow_html=True)
 
