@@ -1,18 +1,19 @@
 import threading
 import queue
 import time
+import tempfile
 import os
 import cv2
+import numpy as np
 from collections import defaultdict
+from Backend import db
+from Backend.cloud_uploader import upload_image_to_cloudinary, upload_video_to_cloudinary
 
 log_queue = queue.Queue()
 _last_log_time = defaultdict(lambda: defaultdict(lambda: 0))
-LOG_COOLDOWN_SECONDS = 10  # per face_id per activity
+LOG_COOLDOWN_SECONDS = 10
 
-snapshot_dir = "snapshots"
-os.makedirs(snapshot_dir, exist_ok=True)
-
-def enqueue_log(timestamp_str, face_id, activity, severity, cropped_face=None, class_id="LR-10"):
+def enqueue_log(timestamp_str, face_id, activity, severity, cropped_face=None, class_id="LR-10", video_clip=None):
     valid_activities = {
         "Looking around frequently",
         "Phone detected",
@@ -30,48 +31,100 @@ def enqueue_log(timestamp_str, face_id, activity, severity, cropped_face=None, c
         return
     _last_log_time[face_id][activity] = now
 
-    log_queue.put((timestamp_str, face_id, activity, severity, cropped_face, class_id))
-    
-    print(f"Enqueue log: face_id={face_id}, activity={activity}, severity={severity}")
-    log_queue.put((timestamp_str, face_id, activity, severity, cropped_face, class_id))
+    log_queue.put((timestamp_str, face_id, activity, severity, cropped_face, class_id, video_clip))
+    print(f"[ASYNC] Enqueued log for face {face_id}, activity={activity}")
 
 def logging_worker():
-    from utils import db  # Lazy import to avoid circular dependency
     while True:
         item = log_queue.get()
         if item is None:
             break
 
-        timestamp_str, face_id, activity, severity, cropped_face, class_id = item
-        image_path = None
+        timestamp_str, face_id, activity, severity, cropped_face, class_id, video_clip = item
+        image_url, video_url = None, None
+        suffix = f"{timestamp_str.replace(':', '-').replace(' ', '_')}_face{face_id}"
 
+        # ======= Upload Image to Cloudinary =======
         if cropped_face is not None:
-            filename = f"{timestamp_str.replace(':', '-').replace(' ', '_')}_face{face_id}.jpg"
-            image_path = os.path.join(snapshot_dir, filename)
             try:
-                cv2.imwrite(image_path, cropped_face)
-                print(f"Saved snapshot to {image_path}")
+                image_url = upload_image_to_cloudinary(
+                    cropped_face,
+                    public_id=suffix,
+                    tags=[class_id, f"face_{face_id}", activity, severity],
+                    class_id=class_id,
+                    face_id=face_id
+                )
+                if not image_url:
+                    print("[Cloudinary] Image upload failed.")
             except Exception as e:
-                print(f"Image saving error: {e}")
+                print(f"[Cloudinary Image Upload Error] {e}")
+                image_url = None  # Explicit fallback
 
+        # ======= Upload Video to Cloudinary or Use Existing URL =======
+        if video_clip is not None:
+            if isinstance(video_clip, list) and len(video_clip) > 0:
+                try:
+                    height, width = video_clip[0].shape[:2]
+
+                    fd, temp_path = tempfile.mkstemp(suffix=".mp4")
+                    os.close(fd)
+
+                    out = cv2.VideoWriter(temp_path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (width, height))
+
+                    for frame in video_clip:
+                        out.write(frame)
+                    out.release()
+
+                    if os.path.exists(temp_path) and os.path.getsize(temp_path) > 1000:
+                        video_url = upload_video_to_cloudinary(
+                            temp_path,
+                            public_id=suffix,
+                            tags=[class_id, f"face_{face_id}", activity, severity],
+                            class_id=class_id,
+                            face_id=face_id
+                        )
+                        print(f"[DEBUG] Uploaded video URL: {video_url}")
+                    else:
+                        print(f"[ERROR] Video file not saved properly or too small: {temp_path}")
+
+                    os.remove(temp_path)
+
+                except Exception as e:
+                    print(f"[Cloudinary Video Upload Error] {e}")
+                    video_url = None
+            elif isinstance(video_clip, str) and video_clip.startswith("http"):
+                # video_clip is already an uploaded video URL
+                video_url = video_clip
+
+        # ======= Final Type Safety Before DB =======
+        import numpy as np
+        if isinstance(image_url, np.ndarray):
+            print(f"[CRITICAL FIX] image_url was still ndarray, setting to None for face {face_id}")
+            image_url = None
+        if isinstance(video_url, list) or (
+            hasattr(video_url, '__len__') and len(video_url) > 0 and isinstance(video_url[0], np.ndarray)
+        ):
+            print(f"[CRITICAL FIX] video_url is raw frames! Clearing before DB insert for face {face_id}")
+            video_url = None
+
+        print(f"[DEBUG] enqueue_log: image_url={image_url}, video_url={video_url}")
+
+        # ======= Log to Database =======
         try:
-            print(f"[LOGGER DEBUG] Logging event: {timestamp_str}, {face_id}, {activity}, {severity}")
             db.insert_log(
                 class_id=class_id,
                 face_id=f"S{int(face_id):03d}",
                 activity=activity,
                 severity=severity,
-                image_url=image_path,
-                video_url=None
+                image_url=image_url,
+                video_url=video_url
             )
-
-            print("[LOGGER DEBUG] Log inserted successfully")
+            print(f"[ASYNC] Log written to DB for face {face_id}")
         except Exception as e:
-            print(f"[DB logging error: {e}")
-
+            print(f"[DB ERROR] {e}")
 
         log_queue.task_done()
 
-# Start logging thread
+# ===== Start Background Thread =====
 logging_thread = threading.Thread(target=logging_worker, daemon=True)
 logging_thread.start()
