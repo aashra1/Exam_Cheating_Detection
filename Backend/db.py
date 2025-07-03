@@ -7,7 +7,7 @@ def get_connection():
         dbname="cheating_logs",       # Name of your DB
         user="postgres",              # Replace if your username is different
         password="GiNny30$$",     # Replace with your PostgreSQL password
-        host="localhost",             # Or 127.0.0.1
+        host="172.26.8.111",             # Or 127.0.0.1
         port="5432"                   # Default PostgreSQL port
     )
 
