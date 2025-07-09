@@ -1,41 +1,53 @@
-import psycopg2
+from dotenv import load_dotenv
+load_dotenv()
+
+import os
+from pymongo import MongoClient
 from datetime import datetime
+import numpy as np
+from urllib.parse import quote_plus
 
-# Connect to your PostgreSQL database
-def get_connection():
-    return psycopg2.connect(
-        dbname="cheating_logs",       # Name of your DB
-        user="postgres",              # Replace if your username is different
-        password="GiNny30$$",     # Replace with your PostgreSQL password
-        host="172.25.0.100",             # Or 127.0.0.1
-        port="5432"                   # Default PostgreSQL port
-    )
+MONGO_USERNAME = os.getenv("MONGO_USERNAME")
+MONGO_PASSWORD = os.getenv("MONGO_PASSWORD")
 
-# Insert a cheating log into the database
+if MONGO_PASSWORD is None:
+    raise ValueError("MONGO_PASSWORD environment variable not set!")
+
+encoded_password = quote_plus(MONGO_PASSWORD)
+
+MONGO_CLUSTER = "cheatinglogs.fw3wlnh.mongodb.net"
+MONGO_DBNAME = "cheating_logs"
+
+MONGO_URI = f"mongodb+srv://{MONGO_USERNAME}:{encoded_password}@{MONGO_CLUSTER}/?retryWrites=true&w=majority&appName=CheatingLogs"
+
+client = MongoClient(MONGO_URI)
+db = client[MONGO_DBNAME]
+logs_collection = db["logs"]
+
+print(f"Username: {MONGO_USERNAME}")
+print(f"Password: {MONGO_PASSWORD}")
+
+
 def insert_log(class_id, face_id, activity, severity, image_url=None, video_url=None):
-    import numpy as np
     if isinstance(image_url, np.ndarray):
         raise TypeError("insert_log got image_url as numpy array! Should be a URL string or None.")
-    if isinstance(video_url, list) or (hasattr(video_url, '__len__') and len(video_url) > 0 and isinstance(video_url[0], np.ndarray)):
+    if isinstance(video_url, list) or (
+        hasattr(video_url, '__len__') and len(video_url) > 0 and isinstance(video_url[0], np.ndarray)
+    ):
         raise TypeError("insert_log got video_url as raw video frames! Should be a URL string or None.")
+
+    log = {
+        "timestamp": datetime.utcnow(),
+        "class_id": class_id,
+        "face_id": face_id,
+        "activity": activity,
+        "severity": severity,
+        "image_url": image_url,
+        "video_url": video_url
+    }
+
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        timestamp = datetime.now()
-
-        print(f"[DB DEBUG] Inserting log: {timestamp=}, {class_id=}, {face_id=}, {activity=}, {severity=}, {image_url=}, {video_url=}")
-
-        insert_query = """
-            INSERT INTO logs (timestamp, class_id, face_id, activity, severity, image_url, video_url)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """
-        cursor.execute(insert_query, (timestamp, class_id, face_id, activity, severity, image_url, video_url))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        print("[DB DEBUG] Insert successful")
+        logs_collection.insert_one(log)
+        print("[MongoDB] Log inserted successfully")
     except Exception as e:
-        print(f"[DB ERROR] Exception during insert_log: {e}")
+        print(f"[MongoDB ERROR] {e}")

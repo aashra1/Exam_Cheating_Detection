@@ -16,23 +16,36 @@ from utils.detection_helpers import compute_iou, merge_pose_to_tracked
 from Backend import db  
 
 def get_logs_from_db():
-    # Fetch all logs from DB table `logs`
+    import pandas as pd
+    import streamlit as st
     try:
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT timestamp, class_id, face_id, activity, severity, image_url, video_url 
-            FROM logs ORDER BY timestamp DESC
-        """)
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        # Convert to pandas DataFrame with matching columns
-        df = pd.DataFrame(rows, columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"])
+        # Fetch all logs from MongoDB logs collection
+        logs_cursor = db.logs_collection.find().sort("timestamp", -1)
+        logs_list = list(logs_cursor)
+
+        if not logs_list:
+            return pd.DataFrame(columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"])
+
+        # Convert Mongo documents to DataFrame
+        # Map fields and fill missing with None
+        records = []
+        for log in logs_list:
+            records.append({
+                "timestamp": log.get("timestamp"),
+                "class_id": log.get("class_id"),
+                "face_id": log.get("face_id"),
+                "activity": log.get("activity"),
+                "severity": log.get("severity"),
+                "image_path": log.get("image_url"),   
+                "video_url": log.get("video_url")
+            })
+
+        df = pd.DataFrame(records)
         return df
     except Exception as e:
-        st.error(f"Error fetching logs from database: {e}")
+        st.error(f"Error fetching logs from MongoDB: {e}")
         return pd.DataFrame(columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"])
+
 
 def dashboard():
     # ===== STYLING =====
