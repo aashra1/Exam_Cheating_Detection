@@ -3,31 +3,26 @@ import streamlit as st
 import pandas as pd
 import os
 from PIL import Image
-import cv2
-import time
+import plotly.express as px
+from datetime import datetime
+import io
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from detection import face_detection, object_detection, pose_detection
 from utils import cheating_logic, tracker
 from utils.detection_helpers import compute_iou, merge_pose_to_tracked
+from Backend import db
 
-# Import db helper to fetch logs
-from Backend import db  
 
 def get_logs_from_db():
-    import pandas as pd
-    import streamlit as st
     try:
-        # Fetch all logs from MongoDB logs collection
         logs_cursor = db.logs_collection.find().sort("timestamp", -1)
         logs_list = list(logs_cursor)
-
         if not logs_list:
-            return pd.DataFrame(columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"])
-
-        # Convert Mongo documents to DataFrame
-        # Map fields and fill missing with None
+            return pd.DataFrame(
+                columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"]
+            )
         records = []
         for log in logs_list:
             records.append({
@@ -36,77 +31,76 @@ def get_logs_from_db():
                 "face_id": log.get("face_id"),
                 "activity": log.get("activity"),
                 "severity": log.get("severity"),
-                "image_path": log.get("image_url"),   
+                "image_path": log.get("image_url"),
                 "video_url": log.get("video_url")
             })
-
         df = pd.DataFrame(records)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
         return df
     except Exception as e:
         st.error(f"Error fetching logs from MongoDB: {e}")
-        return pd.DataFrame(columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"])
+        return pd.DataFrame(
+            columns=["timestamp", "class_id", "face_id", "activity", "severity", "image_path", "video_url"]
+        )
+
+
+def format_severity(sev):
+    if sev == "warning":
+        return "🟡 Warning"
+    elif sev == "critical":
+        return "🔴 Critical"
+    else:
+        return sev.title()
 
 
 def dashboard():
-    # ===== STYLING =====
+    st.set_page_config(page_title="Cheating Detection", layout="wide")
+
     st.markdown("""
         <style>
-            /* Main layout */
             .block-container {
                 padding-top: 1rem;
                 padding-bottom: 1rem;
             }
-            
-            /* Sidebar styling */
             [data-testid="stSidebar"] {
-                background: #1e293b !important;
-                border-right: 1px solid #334155;
+                background: #2563eb !important;
+                border-right: 1px solid #1e40af;
             }
-            
             .sidebar-title {
                 color: white !important;
                 font-size: 1.5rem !important;
                 font-weight: 700;
                 padding: 1rem;
-                border-bottom: 1px solid #334155;
-                margin-bottom: 1rem;
+                border-bottom: 3px solid white !important;
+                margin: 0 -1rem 1rem -1rem;
+                width: calc(100% + 2rem);
             }
-            
-            /* Navigation items */
             div[role="radiogroup"] > label {
                 padding: 0.75rem 1.5rem !important;
                 margin: 0.25rem 0 !important;
-                color: #cbd5e1 !important;
+                color: white !important;
                 font-weight: 500 !important;
                 border-radius: 0 !important;
                 display: flex !important;
                 align-items: center !important;
             }
-            
             div[role="radiogroup"] > label:hover {
                 background: #334155 !important;
                 color: white !important;
             }
-            
             div[role="radiogroup"] > label[data-baseweb="radio"]:has(> div[aria-checked="true"]) {
                 background: #3b82f6 !important;
                 color: white !important;
                 font-weight: 600 !important;
             }
-            
-            /* Hide radio buttons */
             div[role="radiogroup"] > label > div:first-child {
                 display: none !important;
             }
-            
-            /* Content cards */
             .card {
                 background: transparent !important;
                 box-shadow: none !important;
                 border: none !important;
             }
-            
-            /* Headers */
             h1 {
                 font-size: 1.5rem;
                 color: #1e293b;
@@ -114,53 +108,47 @@ def dashboard():
                 padding-bottom: 0.5rem;
                 border-bottom: 1px solid #e2e8f0;
             }
-            
-            /* Tables */
             div[data-testid="stDataFrameContainer"] {
                 border-radius: 8px;
                 border: 1px solid #e2e8f0;
             }
-            
-            /* Buttons */
             button[kind="primary"] {
                 background: #3b82f6 !important;
                 border: none !important;
             }
-            
-            /* Status badges */
-            .status-badge {
-                display: inline-block;
-                padding: 0.25rem 0.75rem;
-                border-radius: 12px;
-                font-size: 0.85rem;
-                font-weight: 500;
+            /* Image centering styles */
+            .image-container {
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                flex-direction: column !important;
+                width: 100% !important;
             }
-            
-            .warning {
-                background: #fef3c7;
-                color: #92400e;
+            .stImage > div > div {
+                display: flex !important;
+                justify-content: center !important;
             }
-            
-            .critical {
-                background: #fee2e2;
-                color: #991b1b;
+            /* Sidebar text color */
+            [data-testid="stSidebar"] * {
+                color: white !important;
             }
         </style>
     """, unsafe_allow_html=True)
 
-    # ===== SIDEBAR =====
+    df = get_logs_from_db()
+
     with st.sidebar:
         st.markdown('<div class="sidebar-title">Cheating Detection</div>', unsafe_allow_html=True)
 
         page = st.radio(
             "Navigation",
-            ["Activity Logs", "Flagged Snapshots", "Video Clips", "Download Logs", "Summary"],  # <-- Added "Video Clips"
+            ["Activity Logs", "Flagged Snapshots", "Video Clips", "Download Logs", "Summary"],
             label_visibility="collapsed",
         )
 
         st.markdown("""
             <div style="margin-top: 2rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
-                <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 0.5rem;">System Status</div>
+                <div style="color: white; font-size: 0.9rem; margin-bottom: 0.5rem;">System Status</div>
                 <div style="display: flex; align-items: center;">
                     <div style="width: 10px; height: 10px; background: #10b981; border-radius: 50%; margin-right: 8px;"></div>
                     <span style="color: white; font-size: 0.9rem;">Active</span>
@@ -168,149 +156,195 @@ def dashboard():
             </div>
         """, unsafe_allow_html=True)
 
-    # Fetch logs from DB 
-    df = get_logs_from_db()
+    if page == "Activity Logs":
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.header("Activity Logs")
 
-    # ===== MAIN CONTENT =====
-    with st.container():
-        if page == "Activity Logs":
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.header("Activity Logs")
-
-            col1, _ = st.columns(2)
-            with col1:
-                severity_filter = st.selectbox("Filter by severity", ["All", "warning", "critical"])
-
-            if severity_filter == "warning":
-                filtered_df = df[df["severity"] == "warning"]
-            elif severity_filter == "critical":
-                filtered_df = df[df["severity"] == "critical"]
-            else:
-                filtered_df = df
-
-            def format_severity(sev):
-                cls = "warning" if sev == "warning" else "critical"
-                return f'<span class="status-badge {cls}">{sev.title()}</span>'
-
-            display_df = filtered_df.copy()
-            display_df["severity"] = display_df["severity"].apply(format_severity)
-
-            st.dataframe(
-                display_df[["timestamp", "class_id", "face_id", "activity", "severity"]],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "severity": st.column_config.Column("Severity")
-                }
+        col1, col2, col3 = st.columns([1, 1, 2])
+        with col1:
+            severity_filter = st.selectbox("Severity", ["All", "warning", "critical"])
+        with col2:
+            class_ids = ["All"] + sorted(df["class_id"].dropna().astype(str).unique().tolist())
+            class_filter = st.selectbox("Class ID", class_ids)
+        with col3:
+            date_range = st.date_input(
+                "Date range",
+                [df["timestamp"].min().date(), df["timestamp"].max().date()]
             )
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("Detection Statistics")
-            cols = st.columns(3)
-            cols[0].metric("Total Incidents", len(df))
-            cols[1].metric("Critical", len(df[df["severity"] == "critical"]))
-            cols[2].metric("Warnings", len(df[df["severity"] == "warning"]))
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        elif page == "Flagged Snapshots":
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.header("Flagged Snapshots")
-
-            if df.empty:
-                st.info("No logs found to display snapshots.")
-            else:
-                cols = st.columns(2)
-                for i, row in df.iterrows():
-                    img_url = row["image_path"]
-                    if img_url and img_url.startswith("http"):  # basic URL check
-                        try:
-                            with cols[i % 2]:
-                                st.image(img_url, use_column_width=True)
-                                st.caption(f"{row['timestamp']} - {row['activity']}")
-                        except Exception as e:
-                            st.error(f"Error loading image from URL: {e}")
-                    else:
-                        continue
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        elif page == "Video Clips":
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.header("Flagged Video Clips")
-
-            if df.empty:
-                st.info("No logs found to display videos.")
-            else:
-                videos_df = df[df["video_url"].notna() & (df["video_url"] != "")]
-
-                if videos_df.empty:
-                    st.info("No video clips available.")
+            if isinstance(date_range, (tuple, list)):
+                if len(date_range) == 2:
+                    start_date, end_date = date_range
+                elif len(date_range) == 1:
+                    start_date = end_date = date_range[0]
                 else:
-                    for i, row in videos_df.iterrows():
-                        video_url = row["video_url"]
-                        timestamp = row["timestamp"]
-                        activity = row["activity"]
-                        face_id = row["face_id"]
-
-                        try:
-                            st.video(video_url)
-                            st.caption(f"{timestamp} | Face ID: {face_id} | Activity: {activity}")
-                        except Exception as e:
-                            st.error(f"Error loading video: {e}")
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        elif page == "Download Logs":
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.header("Download Logs")
-
-            st.radio("Export format", ["CSV", "Excel"], horizontal=True, key="export_format")
-
-            if not df.empty:
-                csv = df.to_csv(index=False).encode('utf-8')
-                try:
-                    import io
-                    excel_buffer = io.BytesIO()
-                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                        df.to_excel(writer, index=False)
-                    excel_data = excel_buffer.getvalue()
-                except Exception:
-                    excel_data = None
-
-                st.download_button(
-                    "Download Data",
-                    csv if st.session_state.export_format == "CSV" else excel_data,
-                    "cheating_logs.csv" if st.session_state.export_format == "CSV" else "cheating_logs.xlsx",
-                    "text/csv" if st.session_state.export_format == "CSV" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                    start_date = end_date = df["timestamp"].min().date()
             else:
-                st.info("No log data available to download.")
+                start_date = end_date = date_range
 
-            st.markdown('</div>', unsafe_allow_html=True)
+        filtered_df = df.copy()
+        if severity_filter != "All":
+            filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
+        if class_filter != "All":
+            filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
+        filtered_df = filtered_df[
+            (filtered_df["timestamp"].dt.date >= start_date) &
+            (filtered_df["timestamp"].dt.date <= end_date)
+        ]
 
-        elif page == "Summary":
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.header("Detection Summary")
+        display_df = filtered_df.copy()
+        display_df["severity"] = display_df["severity"].apply(format_severity)
+        st.dataframe(
+            display_df[["timestamp", "class_id", "face_id", "activity", "severity"]],
+            use_container_width=True,
+            hide_index=True,
+        )
 
-            if df.empty or df["activity"].empty:
-                st.info("No activity data available for chart.")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Incidents", len(df))
+        col2.metric("Critical", len(df[df["severity"] == "critical"]))
+        col3.metric("Warnings", len(df[df["severity"] == "warning"]))
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    elif page == "Flagged Snapshots":
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.header("Flagged Snapshots")
+
+        if df.empty:
+            st.info("No snapshot data.")
+        else:
+            min_date = df["timestamp"].min().date()
+            max_date = df["timestamp"].max().date()
+            date_range = st.date_input("Filter snapshots by Date Range", [min_date, max_date])
+
+            if isinstance(date_range, (tuple, list)):
+                if len(date_range) == 2:
+                    start_date, end_date = date_range
+                elif len(date_range) == 1:
+                    start_date = end_date = date_range[0]
+                else:
+                    start_date = end_date = min_date
             else:
-                st.subheader("Activity Distribution")
-                st.bar_chart(df["activity"].value_counts())
+                start_date = end_date = date_range
 
-            if df.empty or df["severity"].empty:
-                st.info("No severity data available for chart.")
+            filtered_snapshots = df[
+                (df["image_path"].notna()) &
+                (df["image_path"].str.startswith("http")) &
+                (df["timestamp"].dt.date >= start_date) &
+                (df["timestamp"].dt.date <= end_date)
+            ]
+
+            cols = st.columns(1)
+            for i, row in filtered_snapshots.iterrows():
+                with cols[i % 1]:
+                    with st.expander(f"📸 {row['timestamp']} | Face {row['face_id']}"):
+                        st.markdown('<div class="image-container">', unsafe_allow_html=True)
+                        st.image(
+                            row["image_path"],
+                            width=200,
+                            use_container_width=False
+                        )
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        st.write(f"*Activity*: {row['activity']}")
+                        st.write(f"*Severity*: {format_severity(row['severity'])}")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    elif page == "Video Clips":
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.header("Flagged Video Clips")
+
+        if df.empty:
+            st.info("No video clips.")
+        else:
+            min_date = df["timestamp"].min().date()
+            max_date = df["timestamp"].max().date()
+            date_range = st.date_input("Filter videos by Date Range", [min_date, max_date])
+
+            if isinstance(date_range, (tuple, list)):
+                if len(date_range) == 2:
+                    start_date, end_date = date_range
+                elif len(date_range) == 1:
+                    start_date = end_date = date_range[0]
+                else:
+                    start_date = end_date = min_date
             else:
-                st.subheader("Severity Breakdown")
-                st.pyplot(
-                    df["severity"].value_counts().plot.pie(
-                        autopct='%1.1f%%',
-                        colors=["#fef3c7", "#fee2e2"],
-                        labels=["warning", "critical"]
-                    ).figure
-                )
-            st.markdown('</div>', unsafe_allow_html=True)
+                start_date = end_date = date_range
+
+            filtered_videos = df[
+                (df["video_url"].notna()) &
+                (df["video_url"] != "") &
+                (df["timestamp"].dt.date >= start_date) &
+                (df["timestamp"].dt.date <= end_date)
+            ]
+
+            if filtered_videos.empty:
+                st.info("No video clips in this date range.")
+            else:
+                for _, row in filtered_videos.iterrows():
+                    with st.expander(f"🎥 {row['timestamp']} | Face {row['face_id']}"):
+                        st.video(row["video_url"])
+                        st.write(f"*Activity*: {row['activity']}")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    elif page == "Download Logs":
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.header("Download Logs")
+
+        export_scope = st.radio("Export", ["All Logs", "Filtered Logs"])
+        export_format = st.radio("Format", ["CSV", "Excel"], horizontal=True)
+
+        data_to_export = df if export_scope == "All Logs" else filtered_df
+
+        if not data_to_export.empty:
+            if export_format == "CSV":
+                data = data_to_export.to_csv(index=False).encode("utf-8")
+                mime = "text/csv"
+                filename = "cheating_logs.csv"
+            else:
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                    data_to_export.to_excel(writer, index=False)
+                data = buffer.getvalue()
+                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                filename = "cheating_logs.xlsx"
+
+            st.download_button("📥 Download Logs", data=data, file_name=filename, mime=mime)
+        else:
+            st.info("No data available for export.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    elif page == "Summary":
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.header("Detection Summary")
+
+        if not df.empty:
+            st.subheader("📊 Activity Distribution")
+            activity_counts = df["activity"].value_counts().reset_index()
+            activity_counts.columns = ["activity", "count"]
+            fig1 = px.bar(
+                activity_counts,
+                x="activity",
+                y="count",
+                color="activity",
+                labels={"activity": "Activity", "count": "Count"},
+                title="Activity Frequency",
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+
+            st.subheader("⚠ Severity Breakdown")
+            fig2 = px.pie(
+                df,
+                names="severity",
+                title="Severity Split",
+                color_discrete_map={"warning": "#facc15", "critical": "#ef4444"},
+                hole=0.3,
+            )
+            st.plotly_chart(fig2)
+        else:
+            st.info("No data to summarize.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     dashboard()
