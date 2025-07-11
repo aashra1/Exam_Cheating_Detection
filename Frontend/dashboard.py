@@ -63,8 +63,8 @@ def dashboard():
                 padding-bottom: 1rem;
             }
             [data-testid="stSidebar"] {
-                background: #2563eb !important;
-                border-right: 1px solid #1e40af;
+                background: #1e293b !important;
+                border-right: 1px solid #334155;
             }
             .sidebar-title {
                 color: white !important;
@@ -78,7 +78,7 @@ def dashboard():
             div[role="radiogroup"] > label {
                 padding: 0.75rem 1.5rem !important;
                 margin: 0.25rem 0 !important;
-                color: white !important;
+                color: #cbd5e1 !important;
                 font-weight: 500 !important;
                 border-radius: 0 !important;
                 display: flex !important;
@@ -116,7 +116,6 @@ def dashboard():
                 background: #3b82f6 !important;
                 border: none !important;
             }
-            /* Image centering styles */
             .image-container {
                 display: flex !important;
                 justify-content: center !important;
@@ -128,7 +127,6 @@ def dashboard():
                 display: flex !important;
                 justify-content: center !important;
             }
-            /* Sidebar text color */
             [data-testid="stSidebar"] * {
                 color: white !important;
             }
@@ -319,7 +317,6 @@ def dashboard():
         st.header("Detection Summary")
 
         if not df.empty:
-            st.subheader("📊 Activity Distribution")
             activity_counts = df["activity"].value_counts().reset_index()
             activity_counts.columns = ["activity", "count"]
             fig1 = px.bar(
