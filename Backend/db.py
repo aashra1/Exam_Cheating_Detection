@@ -18,7 +18,7 @@ encoded_password = quote_plus(MONGO_PASSWORD)
 MONGO_CLUSTER = "cheatinglogs.fw3wlnh.mongodb.net"
 MONGO_DBNAME = "cheating_logs"
 
-MONGO_URI = f"mongodb+srv://{MONGO_USERNAME}:{encoded_password}@{MONGO_CLUSTER}/?retryWrites=true&w=majority&appName=CheatingLogs"
+MONGO_URI = f"mongodb+srv://{MONGO_USERNAME}:{encoded_password}@{MONGO_CLUSTER}/?retryWrites=true&w=majority&tls=true&appName=CheatingLogs"
 
 client = MongoClient(MONGO_URI)
 db = client[MONGO_DBNAME]

@@ -20,7 +20,9 @@ def enqueue_log(timestamp_str, face_id, activity, severity, cropped_face=None, c
         "Phone detected NEAR HAND",
         "Phone detected near face",
         "Suspicious behavior",
-        "CHEATING LIKELY"
+        "CHEATING LIKELY",
+        "Turned back detected",
+        "Phone detected (no face nearby)"
     }
 
     if activity not in valid_activities or severity not in ["warning", "critical"]:
@@ -58,19 +60,17 @@ def logging_worker():
                     print("[Cloudinary] Image upload failed.")
             except Exception as e:
                 print(f"[Cloudinary Image Upload Error] {e}")
-                image_url = None  # Explicit fallback
+                image_url = None
 
         # ======= Upload Video to Cloudinary or Use Existing URL =======
         if video_clip is not None:
             if isinstance(video_clip, list) and len(video_clip) > 0:
                 try:
                     height, width = video_clip[0].shape[:2]
-
                     fd, temp_path = tempfile.mkstemp(suffix=".mp4")
                     os.close(fd)
 
                     out = cv2.VideoWriter(temp_path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (width, height))
-
                     for frame in video_clip:
                         out.write(frame)
                     out.release()
@@ -93,13 +93,11 @@ def logging_worker():
                     print(f"[Cloudinary Video Upload Error] {e}")
                     video_url = None
             elif isinstance(video_clip, str) and video_clip.startswith("http"):
-                # video_clip is already an uploaded video URL
                 video_url = video_clip
 
-        # ======= Final Type Safety Before DB =======
-        import numpy as np
+        # ======= Type Safety Before DB =======
         if isinstance(image_url, np.ndarray):
-            print(f"[CRITICAL FIX] image_url was still ndarray, setting to None for face {face_id}")
+            print(f"[CRITICAL FIX] image_url was ndarray, setting to None for face {face_id}")
             image_url = None
         if isinstance(video_url, list) or (
             hasattr(video_url, '__len__') and len(video_url) > 0 and isinstance(video_url[0], np.ndarray)
@@ -113,7 +111,7 @@ def logging_worker():
         try:
             db.insert_log(
                 class_id=class_id,
-                face_id=f"S{int(face_id):03d}",
+                face_id=f"S{int(face_id):03d}" if str(face_id).isdigit() else face_id,
                 activity=activity,
                 severity=severity,
                 image_url=image_url,

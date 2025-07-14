@@ -52,138 +52,150 @@ def format_severity(sev):
     else:
         return sev.title()
 
+def get_activity_options(df, severity_filter):
+    if severity_filter == "critical":
+        filtered = df[df["severity"] == "critical"]
+    elif severity_filter == "warning":
+        filtered = df[df["severity"] == "warning"]
+    else:
+        filtered = df
+    return ["All"] + sorted(filtered["activity"].dropna().astype(str).unique().tolist())
+
 
 def dashboard():
     st.set_page_config(page_title="Cheating Detection", layout="wide")
 
-    st.markdown("""
-        <style>
-            .block-container {
-                padding-top: 1rem;
-                padding-bottom: 1rem;
-            }
-            [data-testid="stSidebar"] {
-                background: #1e293b !important;
-                border-right: 1px solid #334155;
-            }
-            .sidebar-title {
-                color: white !important;
-                font-size: 1.5rem !important;
-                font-weight: 700;
-                padding: 1rem;
-                border-bottom: 3px solid white !important;
-                margin: 0 -1rem 1rem -1rem;
-                width: calc(100% + 2rem);
-            }
-            div[role="radiogroup"] > label {
-                padding: 0.75rem 1.5rem !important;
-                margin: 0.25rem 0 !important;
-                color: #cbd5e1 !important;
-                font-weight: 500 !important;
-                border-radius: 0 !important;
-                display: flex !important;
-                align-items: center !important;
-            }
-            div[role="radiogroup"] > label:hover {
-                background: #334155 !important;
-                color: white !important;
-            }
-            div[role="radiogroup"] > label[data-baseweb="radio"]:has(> div[aria-checked="true"]) {
-                background: #3b82f6 !important;
-                color: white !important;
-                font-weight: 600 !important;
-            }
-            div[role="radiogroup"] > label > div:first-child {
-                display: none !important;
-            }
-            .card {
-                background: transparent !important;
-                box-shadow: none !important;
-                border: none !important;
-            }
-            h1 {
-                font-size: 1.5rem;
-                color: #1e293b;
-                margin-bottom: 1rem;
-                padding-bottom: 0.5rem;
-                border-bottom: 1px solid #e2e8f0;
-            }
-            div[data-testid="stDataFrameContainer"] {
-                border-radius: 8px;
-                border: 1px solid #e2e8f0;
-            }
-            button[kind="primary"] {
-                background: #3b82f6 !important;
-                border: none !important;
-            }
-            .image-container {
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-                flex-direction: column !important;
-                width: 100% !important;
-            }
-            .stImage > div > div {
-                display: flex !important;
-                justify-content: center !important;
-            }
-            [data-testid="stSidebar"] * {
-                color: white !important;
-            }
-        </style>
-    """, unsafe_allow_html=True)
+    st.markdown("""<style>
+        .block-container {
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+        [data-testid="stSidebar"] {
+            background: #1e293b !important;
+            border-right: 1px solid #334155;
+        }
+        .sidebar-title {
+            color: white !important;
+            font-size: 1.5rem !important;
+            font-weight: 700;
+            padding: 1rem;
+            border-bottom: 3px solid white !important;
+            margin: 0 -1rem 1rem -1rem;
+            width: calc(100% + 2rem);
+        }
+        div[role="radiogroup"] > label {
+            padding: 0.75rem 1.5rem !important;
+            margin: 0.25rem 0 !important;
+            color: #cbd5e1 !important;
+            font-weight: 500 !important;
+            border-radius: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        div[role="radiogroup"] > label:hover {
+            background: #334155 !important;
+            color: white !important;
+        }
+        div[role="radiogroup"] > label[data-baseweb="radio"]:has(> div[aria-checked="true"]) {
+            background: #3b82f6 !important;
+            color: white !important;
+            font-weight: 600 !important;
+        }
+        div[role="radiogroup"] > label > div:first-child {
+            display: none !important;
+        }
+        .card {
+            background: transparent !important;
+            box-shadow: none !important;
+            border: none !important;
+        }
+        h1 {
+            font-size: 1.5rem;
+            color: #1e293b;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        div[data-testid="stDataFrameContainer"] {
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        button[kind="primary"] {
+            background: #3b82f6 !important;
+            border: none !important;
+        }
+        .image-container {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            flex-direction: column !important;
+            width: 100% !important;
+        }
+        .stImage > div > div {
+            display: flex !important;
+            justify-content: center !important;
+        }
+        [data-testid="stSidebar"] * {
+            color: white !important;
+        }
+    </style>""", unsafe_allow_html=True)
 
     df = get_logs_from_db()
 
     with st.sidebar:
         st.markdown('<div class="sidebar-title">Cheating Detection</div>', unsafe_allow_html=True)
-
         page = st.radio(
             "Navigation",
             ["Activity Logs", "Flagged Snapshots", "Video Clips", "Download Logs", "Summary"],
             label_visibility="collapsed",
+            key="page_selector"
         )
-
-        st.markdown("""
-            <div style="margin-top: 2rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
-                <div style="color: white; font-size: 0.9rem; margin-bottom: 0.5rem;">System Status</div>
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 10px; height: 10px; background: #10b981; border-radius: 50%; margin-right: 8px;"></div>
-                    <span style="color: white; font-size: 0.9rem;">Active</span>
-                </div>
+        st.markdown("""<div style="margin-top: 2rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+            <div style="color: white; font-size: 0.9rem; margin-bottom: 0.5rem;">System Status</div>
+            <div style="display: flex; align-items: center;">
+                <div style="width: 10px; height: 10px; background: #10b981; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="color: white; font-size: 0.9rem;">Active</span>
             </div>
-        """, unsafe_allow_html=True)
+        </div>""", unsafe_allow_html=True)
 
     if page == "Activity Logs":
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.header("Activity Logs")
 
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
-            severity_filter = st.selectbox("Severity", ["All", "warning", "critical"])
-        with col2:
+        # Filters below header
+        f1, f2, f3, f4 = st.columns(4)
+        with f1:
+            severity_filter = st.selectbox("Severity", ["All", "warning", "critical"], key="severity_filter_activity")
+        with f2:
             class_ids = ["All"] + sorted(df["class_id"].dropna().astype(str).unique().tolist())
-            class_filter = st.selectbox("Class ID", class_ids)
-        with col3:
+            class_filter = st.selectbox("Class ID", class_ids, key="class_filter_activity")
+        with f3:
+            activity_list = get_activity_options(df, severity_filter)
+            activity_filter = st.selectbox("Activity", activity_list, key="activity_filter_activity")
+        with f4:
             date_range = st.date_input(
-                "Date range",
-                [df["timestamp"].min().date(), df["timestamp"].max().date()]
+                "Date Range",
+                [df["timestamp"].min().date(), df["timestamp"].max().date()],
+                key="date_filter_activity"
             )
-            if isinstance(date_range, (tuple, list)):
-                if len(date_range) == 2:
-                    start_date, end_date = date_range
-                elif len(date_range) == 1:
-                    start_date = end_date = date_range[0]
-                else:
-                    start_date = end_date = df["timestamp"].min().date()
+
+        if isinstance(date_range, (tuple, list)):
+            if len(date_range) == 2:
+                start_date, end_date = date_range
+            elif len(date_range) == 1:
+                start_date = end_date = date_range[0]
             else:
-                start_date = end_date = date_range
+                start_date = end_date = df["timestamp"].min().date()
+        else:
+            start_date = end_date = date_range
 
         filtered_df = df.copy()
         if severity_filter != "All":
             filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
         if class_filter != "All":
             filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
+        if activity_filter != "All":
+            filtered_df = filtered_df[filtered_df["activity"].astype(str) == activity_filter]
         filtered_df = filtered_df[
             (filtered_df["timestamp"].dt.date >= start_date) &
             (filtered_df["timestamp"].dt.date <= end_date)
@@ -207,28 +219,51 @@ def dashboard():
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.header("Flagged Snapshots")
 
-        if df.empty:
+        # Filters below header
+        f1, f2, f3, f4 = st.columns(4)
+        with f1:
+            severity_filter = st.selectbox("Severity", ["All", "warning", "critical"], key="severity_filter_snapshots")
+        with f2:
+            class_ids = ["All"] + sorted(df["class_id"].dropna().astype(str).unique().tolist())
+            class_filter = st.selectbox("Class ID", class_ids, key="class_filter_snapshots")
+        with f3:
+            activity_list = get_activity_options(df, severity_filter)
+            activity_filter = st.selectbox("Activity", activity_list, key="activity_filter_snapshots")
+        with f4:
+            date_range = st.date_input(
+                "Date Range",
+                [df["timestamp"].min().date(), df["timestamp"].max().date()],
+                key="date_filter_snapshots"
+            )
+
+        if isinstance(date_range, (tuple, list)):
+            if len(date_range) == 2:
+                start_date, end_date = date_range
+            elif len(date_range) == 1:
+                start_date = end_date = date_range[0]
+            else:
+                start_date = end_date = df["timestamp"].min().date()
+        else:
+            start_date = end_date = date_range
+
+        filtered_df = df.copy()
+        if severity_filter != "All":
+            filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
+        if class_filter != "All":
+            filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
+        if activity_filter != "All":
+            filtered_df = filtered_df[filtered_df["activity"].astype(str) == activity_filter]
+        filtered_df = filtered_df[
+            (filtered_df["timestamp"].dt.date >= start_date) &
+            (filtered_df["timestamp"].dt.date <= end_date)
+        ]
+
+        if filtered_df.empty:
             st.info("No snapshot data.")
         else:
-            min_date = df["timestamp"].min().date()
-            max_date = df["timestamp"].max().date()
-            date_range = st.date_input("Filter snapshots by Date Range", [min_date, max_date])
-
-            if isinstance(date_range, (tuple, list)):
-                if len(date_range) == 2:
-                    start_date, end_date = date_range
-                elif len(date_range) == 1:
-                    start_date = end_date = date_range[0]
-                else:
-                    start_date = end_date = min_date
-            else:
-                start_date = end_date = date_range
-
-            filtered_snapshots = df[
-                (df["image_path"].notna()) &
-                (df["image_path"].str.startswith("http")) &
-                (df["timestamp"].dt.date >= start_date) &
-                (df["timestamp"].dt.date <= end_date)
+            filtered_snapshots = filtered_df[
+                (filtered_df["image_path"].notna()) &
+                (filtered_df["image_path"].str.startswith("http"))
             ]
 
             cols = st.columns(1)
@@ -236,43 +271,61 @@ def dashboard():
                 with cols[i % 1]:
                     with st.expander(f"📸 {row['timestamp']} | Face {row['face_id']}"):
                         st.markdown('<div class="image-container">', unsafe_allow_html=True)
-                        st.image(
-                            row["image_path"],
-                            width=200,
-                            use_container_width=False
-                        )
+                        st.image(row["image_path"], width=200, use_container_width=False)
                         st.markdown('</div>', unsafe_allow_html=True)
                         st.write(f"*Activity*: {row['activity']}")
                         st.write(f"*Severity*: {format_severity(row['severity'])}")
-
         st.markdown('</div>', unsafe_allow_html=True)
 
     elif page == "Video Clips":
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.header("Flagged Video Clips")
 
-        if df.empty:
+        # Filters below header
+        f1, f2, f3, f4 = st.columns(4)
+        with f1:
+            severity_filter = st.selectbox("Severity", ["All", "warning", "critical"], key="severity_filter_videos")
+        with f2:
+            class_ids = ["All"] + sorted(df["class_id"].dropna().astype(str).unique().tolist())
+            class_filter = st.selectbox("Class ID", class_ids, key="class_filter_videos")
+        with f3:
+            activity_list = get_activity_options(df, severity_filter)
+            activity_filter = st.selectbox("Activity", activity_list, key="activity_filter_videos")
+        with f4:
+            date_range = st.date_input(
+                "Date Range",
+                [df["timestamp"].min().date(), df["timestamp"].max().date()],
+                key="date_filter_videos"
+            )
+
+        if isinstance(date_range, (tuple, list)):
+            if len(date_range) == 2:
+                start_date, end_date = date_range
+            elif len(date_range) == 1:
+                start_date = end_date = date_range[0]
+            else:
+                start_date = end_date = df["timestamp"].min().date()
+        else:
+            start_date = end_date = date_range
+
+        filtered_df = df.copy()
+        if severity_filter != "All":
+            filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
+        if class_filter != "All":
+            filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
+        if activity_filter != "All":
+            filtered_df = filtered_df[filtered_df["activity"].astype(str) == activity_filter]
+        filtered_df = filtered_df[
+            (filtered_df["timestamp"].dt.date >= start_date) &
+            (filtered_df["timestamp"].dt.date <= end_date)
+        ]
+
+        if filtered_df.empty:
             st.info("No video clips.")
         else:
-            min_date = df["timestamp"].min().date()
-            max_date = df["timestamp"].max().date()
-            date_range = st.date_input("Filter videos by Date Range", [min_date, max_date])
-
-            if isinstance(date_range, (tuple, list)):
-                if len(date_range) == 2:
-                    start_date, end_date = date_range
-                elif len(date_range) == 1:
-                    start_date = end_date = date_range[0]
-                else:
-                    start_date = end_date = min_date
-            else:
-                start_date = end_date = date_range
-
-            filtered_videos = df[
-                (df["video_url"].notna()) &
-                (df["video_url"] != "") &
-                (df["timestamp"].dt.date >= start_date) &
-                (df["timestamp"].dt.date <= end_date)
+            filtered_videos = filtered_df[
+                (filtered_df["video_url"].notna()) &
+                (filtered_df["video_url"] != "")
             ]
 
             if filtered_videos.empty:
@@ -282,15 +335,53 @@ def dashboard():
                     with st.expander(f"🎥 {row['timestamp']} | Face {row['face_id']}"):
                         st.video(row["video_url"])
                         st.write(f"*Activity*: {row['activity']}")
-
         st.markdown('</div>', unsafe_allow_html=True)
 
     elif page == "Download Logs":
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.header("Download Logs")
 
-        export_scope = st.radio("Export", ["All Logs", "Filtered Logs"])
-        export_format = st.radio("Format", ["CSV", "Excel"], horizontal=True)
+        # Filters below header
+        f1, f2, f3, f4 = st.columns(4)
+        with f1:
+            severity_filter = st.selectbox("Severity", ["All", "warning", "critical"], key="severity_filter_download")
+        with f2:
+            class_ids = ["All"] + sorted(df["class_id"].dropna().astype(str).unique().tolist())
+            class_filter = st.selectbox("Class ID", class_ids, key="class_filter_download")
+        with f3:
+            activity_list = get_activity_options(df, severity_filter)
+            activity_filter = st.selectbox("Activity", activity_list, key="activity_filter_download")
+        with f4:
+            date_range = st.date_input(
+                "Date Range",
+                [df["timestamp"].min().date(), df["timestamp"].max().date()],
+                key="date_filter_download"
+            )
+
+        if isinstance(date_range, (tuple, list)):
+            if len(date_range) == 2:
+                start_date, end_date = date_range
+            elif len(date_range) == 1:
+                start_date = end_date = date_range[0]
+            else:
+                start_date = end_date = df["timestamp"].min().date()
+        else:
+            start_date = end_date = date_range
+
+        filtered_df = df.copy()
+        if severity_filter != "All":
+            filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
+        if class_filter != "All":
+            filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
+        if activity_filter != "All":
+            filtered_df = filtered_df[filtered_df["activity"].astype(str) == activity_filter]
+        filtered_df = filtered_df[
+            (filtered_df["timestamp"].dt.date >= start_date) &
+            (filtered_df["timestamp"].dt.date <= end_date)
+        ]
+
+        export_scope = st.radio("Export", ["All Logs", "Filtered Logs"], key="export_scope")
+        export_format = st.radio("Format", ["CSV", "Excel"], horizontal=True, key="export_format")
 
         data_to_export = df if export_scope == "All Logs" else filtered_df
 
