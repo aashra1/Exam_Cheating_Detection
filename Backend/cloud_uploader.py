@@ -2,6 +2,7 @@ from Backend import cloudinary_config
 import cloudinary.uploader
 import cv2
 import tempfile
+import imageio
 import os
 
 def upload_image_to_cloudinary(image_path_or_array, public_id=None, tags=None, class_id="LR-10", face_id="unknown_face"):
@@ -71,36 +72,27 @@ def upload_video_to_cloudinary(video_path, public_id=None, tags=None, class_id="
     except Exception as e:
         print(f"[Cloudinary Video Upload Error] {e}")
         return None
-    
-def upload_video_clip_from_frames(frames, class_id="LR-10", face_id="unknown_face", fps=20):
-    import tempfile
-    import cv2
 
+
+def upload_video_clip_from_frames(frames, class_id="LR-10", face_id="unknown_face", fps=20):
     if not frames:
         print("[Upload Clip] No frames to write.")
         return None
 
-    height, width = frames[0].shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-
     try:
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_video:
-            temp_path = tmp_video.name
-            out = cv2.VideoWriter(temp_path, fourcc, fps, (width, height))
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_file:
+            temp_path = tmp_file.name
 
-            for frame in frames:
-                if frame.shape[:2] != (height, width):
-                    frame = cv2.resize(frame, (width, height))
-                out.write(frame)
+        # Convert BGR to RGB (imageio uses RGB)
+        rgb_frames = [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames]
 
-            out.release()
+        # Write video using H.264 compatible codec
+        imageio.mimwrite(temp_path, rgb_frames, fps=fps, codec='libx264', quality=8)
 
-            # Upload to Cloudinary using your existing function
-            return upload_video_to_cloudinary(
-                video_path=temp_path,
-                class_id=class_id,
-                face_id=face_id
-            )
+        # Upload to Cloudinary
+        url = upload_video_to_cloudinary(temp_path, class_id=class_id, face_id=face_id)
+        return url
+
     except Exception as e:
         print(f"[Upload Clip Error] {e}")
         return None

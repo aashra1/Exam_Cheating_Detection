@@ -6,6 +6,7 @@ from PIL import Image
 import plotly.express as px
 from datetime import datetime
 import io
+from base64 import b64encode  # ✅ Import added here
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -13,6 +14,20 @@ from detection import face_detection, object_detection, pose_detection
 from utils import cheating_logic, tracker
 from utils.detection_helpers import compute_iou, merge_pose_to_tracked
 from Backend import db
+
+def display_logo(logo_path="Frontend/assets/logo.png", width=400):
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_data = f.read()
+        logo_base64 = b64encode(logo_data).decode()
+        st.markdown(f'''
+            <div style="text-align: center; margin-top: -2rem;">
+                <img src="data:image/png;base64,{logo_base64}" width="{width}" style="margin: auto; display: block;" />
+            </div>
+            <hr style="border: none; height: 2px; background-color: white; margin: 0 0 1rem 0; width: 100%;">
+        ''', unsafe_allow_html=True)
+    else:
+        st.warning(f"Logo image not found at: {logo_path}")
 
 
 def get_logs_from_db():
@@ -160,7 +175,7 @@ def dashboard():
             return df["timestamp"].min().date(), df["timestamp"].max().date()
 
     with st.sidebar:
-        st.markdown('<div class="sidebar-title">Cheating Detection</div>', unsafe_allow_html=True)
+        display_logo()
         page = st.radio(
             "Navigation",
             ["Activity Logs", "Flagged Snapshots", "Video Clips", "Download Logs", "Summary"],

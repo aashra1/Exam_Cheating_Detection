@@ -233,7 +233,7 @@ def update_scores(faces, phone_boxes, hands_near_face_dict, now, frame, hand_box
             if now_time - last_video_upload_time[face_id] > VIDEO_UPLOAD_COOLDOWN_SECONDS:
                 cropped_face = frame[min_y:max_y, min_x:max_x]
                 video_clip = list(face_frame_buffer[face_id])
-                video_url = upload_video_clip_from_frames(video_clip, face_id)
+                video_url = upload_video_clip_from_frames(video_clip, class_id="LR-10", face_id=face_id)
                 log_event(timestamp_str, face_id, "CHEATING LIKELY", "critical", cropped_face, class_id="LR-10", video_clip=video_url)
                 last_video_upload_time[face_id] = now_time
         elif prob > 0.5:
