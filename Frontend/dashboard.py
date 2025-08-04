@@ -44,6 +44,13 @@ def get_logs_from_db():
         )
 
 
+def clean_timestamp(df):
+    df = df.copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df = df.dropna(subset=["timestamp"])
+    return df
+
+
 def format_severity(sev):
     if sev == "warning":
         return "🟡 Warning"
@@ -51,6 +58,7 @@ def format_severity(sev):
         return "🔴 Critical"
     else:
         return sev.title()
+
 
 def get_activity_options(df, severity_filter):
     if severity_filter == "critical":
@@ -141,6 +149,15 @@ def dashboard():
     </style>""", unsafe_allow_html=True)
 
     df = get_logs_from_db()
+    df = clean_timestamp(df)
+
+    # Helper function to get min/max dates safely
+    def get_min_max_dates(df):
+        if df.empty:
+            today = datetime.today().date()
+            return today, today
+        else:
+            return df["timestamp"].min().date(), df["timestamp"].max().date()
 
     with st.sidebar:
         st.markdown('<div class="sidebar-title">Cheating Detection</div>', unsafe_allow_html=True)
@@ -162,7 +179,7 @@ def dashboard():
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.header("Activity Logs")
 
-        # Filters below header
+        min_date, max_date = get_min_max_dates(df)
         f1, f2, f3, f4 = st.columns(4)
         with f1:
             severity_filter = st.selectbox("Severity", ["All", "warning", "critical"], key="severity_filter_activity")
@@ -175,7 +192,7 @@ def dashboard():
         with f4:
             date_range = st.date_input(
                 "Date Range",
-                [df["timestamp"].min().date(), df["timestamp"].max().date()],
+                [min_date, max_date],
                 key="date_filter_activity"
             )
 
@@ -185,17 +202,19 @@ def dashboard():
             elif len(date_range) == 1:
                 start_date = end_date = date_range[0]
             else:
-                start_date = end_date = df["timestamp"].min().date()
+                start_date = end_date = min_date
         else:
             start_date = end_date = date_range
 
         filtered_df = df.copy()
+
         if severity_filter != "All":
             filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
         if class_filter != "All":
             filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
         if activity_filter != "All":
             filtered_df = filtered_df[filtered_df["activity"].astype(str) == activity_filter]
+
         filtered_df = filtered_df[
             (filtered_df["timestamp"].dt.date >= start_date) &
             (filtered_df["timestamp"].dt.date <= end_date)
@@ -219,7 +238,7 @@ def dashboard():
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.header("Flagged Snapshots")
 
-        # Filters below header
+        min_date, max_date = get_min_max_dates(df)
         f1, f2, f3, f4 = st.columns(4)
         with f1:
             severity_filter = st.selectbox("Severity", ["All", "warning", "critical"], key="severity_filter_snapshots")
@@ -232,7 +251,7 @@ def dashboard():
         with f4:
             date_range = st.date_input(
                 "Date Range",
-                [df["timestamp"].min().date(), df["timestamp"].max().date()],
+                [min_date, max_date],
                 key="date_filter_snapshots"
             )
 
@@ -242,17 +261,19 @@ def dashboard():
             elif len(date_range) == 1:
                 start_date = end_date = date_range[0]
             else:
-                start_date = end_date = df["timestamp"].min().date()
+                start_date = end_date = min_date
         else:
             start_date = end_date = date_range
 
         filtered_df = df.copy()
+
         if severity_filter != "All":
             filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
         if class_filter != "All":
             filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
         if activity_filter != "All":
             filtered_df = filtered_df[filtered_df["activity"].astype(str) == activity_filter]
+
         filtered_df = filtered_df[
             (filtered_df["timestamp"].dt.date >= start_date) &
             (filtered_df["timestamp"].dt.date <= end_date)
@@ -281,7 +302,7 @@ def dashboard():
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.header("Flagged Video Clips")
 
-        # Filters below header
+        min_date, max_date = get_min_max_dates(df)
         f1, f2, f3, f4 = st.columns(4)
         with f1:
             severity_filter = st.selectbox("Severity", ["All", "warning", "critical"], key="severity_filter_videos")
@@ -294,7 +315,7 @@ def dashboard():
         with f4:
             date_range = st.date_input(
                 "Date Range",
-                [df["timestamp"].min().date(), df["timestamp"].max().date()],
+                [min_date, max_date],
                 key="date_filter_videos"
             )
 
@@ -304,17 +325,19 @@ def dashboard():
             elif len(date_range) == 1:
                 start_date = end_date = date_range[0]
             else:
-                start_date = end_date = df["timestamp"].min().date()
+                start_date = end_date = min_date
         else:
             start_date = end_date = date_range
 
         filtered_df = df.copy()
+
         if severity_filter != "All":
             filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
         if class_filter != "All":
             filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
         if activity_filter != "All":
             filtered_df = filtered_df[filtered_df["activity"].astype(str) == activity_filter]
+
         filtered_df = filtered_df[
             (filtered_df["timestamp"].dt.date >= start_date) &
             (filtered_df["timestamp"].dt.date <= end_date)
@@ -341,7 +364,7 @@ def dashboard():
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.header("Download Logs")
 
-        # Filters below header
+        min_date, max_date = get_min_max_dates(df)
         f1, f2, f3, f4 = st.columns(4)
         with f1:
             severity_filter = st.selectbox("Severity", ["All", "warning", "critical"], key="severity_filter_download")
@@ -354,7 +377,7 @@ def dashboard():
         with f4:
             date_range = st.date_input(
                 "Date Range",
-                [df["timestamp"].min().date(), df["timestamp"].max().date()],
+                [min_date, max_date],
                 key="date_filter_download"
             )
 
@@ -364,17 +387,19 @@ def dashboard():
             elif len(date_range) == 1:
                 start_date = end_date = date_range[0]
             else:
-                start_date = end_date = df["timestamp"].min().date()
+                start_date = end_date = min_date
         else:
             start_date = end_date = date_range
 
         filtered_df = df.copy()
+
         if severity_filter != "All":
             filtered_df = filtered_df[filtered_df["severity"] == severity_filter]
         if class_filter != "All":
             filtered_df = filtered_df[filtered_df["class_id"].astype(str) == class_filter]
         if activity_filter != "All":
             filtered_df = filtered_df[filtered_df["activity"].astype(str) == activity_filter]
+
         filtered_df = filtered_df[
             (filtered_df["timestamp"].dt.date >= start_date) &
             (filtered_df["timestamp"].dt.date <= end_date)
