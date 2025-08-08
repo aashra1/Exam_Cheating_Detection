@@ -2,6 +2,7 @@ import cv2
 import time
 import os
 import numpy as np
+import torch
 
 from detection import face_detection, object_detection, pose_detection
 from utils import cheating_logic
@@ -38,9 +39,16 @@ def merge_pose_to_tracked(tracked_faces, detected_faces):
 
 def main():
     print("Loading models...")
-    yolo_model = object_detection.load_model('models/yolov5su.pt').to("cuda")
-    yolo_face_model, face_mesh = face_detection.init_face_mesh()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[INFO] Using device: {device}")
+
+    yolo_model = object_detection.load_model('models/yolov5su.pt').to(device)
+    yolo_face_model, face_mesh = face_detection.init_face_mesh()  # MediaPipe face mesh runs on CPU
+
     pose_detector = pose_detection.init_pose()
+    pose_detector.to(device)
+
     print("Models loaded.")
 
     video_path = 'videos/cheating_video4.mp4'
@@ -90,7 +98,6 @@ def main():
             if DEBUG_MODE:
                 print(f"[DEBUG] Hands near face dict: {hands_near_face_dict}")
 
-            # ✅ Improved pose detection parsing
             pose_results = pose_detector(frame)
             pose_keypoints_list = []
             try:
@@ -108,7 +115,8 @@ def main():
             for i, keypoints in enumerate(pose_keypoints_list):
                 confs = keypoints[:, 2]
                 avg_conf = confs.mean()
-                print(f"[DEBUG] Pose {i} confidence: avg={avg_conf:.2f}")
+                if DEBUG_MODE:
+                    print(f"[DEBUG] Pose {i} confidence: avg={avg_conf:.2f}")
 
         except Exception as e:
             print(f"[❌] Detection error: {e}")
@@ -146,7 +154,6 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     main()
